@@ -48,13 +48,15 @@ public interface JoinExampleMapper<T> {
         List<Map<String, Object>> list = selectByJoinExample(example);
         return transformList(list, transform, null, new String[0]);
     }
+
+    @SuppressWarnings("unchecked")
     default <R> R selectByJoinExampleTransform(JoinExample example, Class<R> rClass) {
         List<Map<String, Object>> list = selectByJoinExample(example);
         if (CollectionUtil.isEmpty(list) || list.get(0) == null) {
             return null;
         }
         if (ClassUtil.isBasicType(rClass) || rClass.isAssignableFrom(String.class)) {
-            return Convert.convert(rClass, list.get(0).values().iterator().next());
+            return Convert.convert(rClass, list.get(0).values().iterator().next(), (R) ClassUtil.getDefaultValue(rClass));
         }
         return Convert.convert(rClass, list.get(0));
     }

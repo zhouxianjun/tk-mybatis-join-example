@@ -146,6 +146,15 @@ public class JoinExample {
             example = new JoinExample().setTableName(entityTable.getName()).setAlias(tableAlias(tableClass));
         }
 
+        public Builder noAlias() {
+            return setAlias("");
+        }
+
+        public Builder setAlias(String alias) {
+            example.setAlias(alias);
+            return this;
+        }
+
         public Builder addTable(Table table) {
             example.getTables().add(table);
             return this;
@@ -164,7 +173,7 @@ public class JoinExample {
             return addCol("count(" + column(fn) + ")");
         }
 
-        public <T> Builder count() {
+        public Builder count() {
             return addCol("count(*)");
         }
 
