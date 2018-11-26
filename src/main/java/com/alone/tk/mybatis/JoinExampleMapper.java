@@ -57,7 +57,7 @@ public interface JoinExampleMapper<T> {
             return defaultValue;
         }
         if (ClassUtil.isBasicType(rClass) || rClass.isAssignableFrom(String.class)) {
-            return Convert.convert(rClass, list.get(0).values().iterator().next(), defaultValue);
+            return Convert.convert(Convert.wrap(rClass), list.get(0).values().iterator().next(), defaultValue);
         }
         return Convert.convert(rClass, list.get(0));
     }
