@@ -25,6 +25,7 @@ import java.lang.invoke.SerializedLambda;
 import java.lang.reflect.Method;
 import java.text.MessageFormat;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -39,7 +40,7 @@ import java.util.stream.Collectors;
 public class JoinExample {
     private static final Pattern GET_PATTERN = Pattern.compile("^get[A-Z].*");
     private static final Pattern IS_PATTERN  = Pattern.compile("^is[A-Z].*");
-    public static final Map<Class, List<Column>> CLASS_COLUMN_MAP = new HashMap<>(10);
+    public static final Map<Class, List<Column>> CLASS_COLUMN_MAP = new ConcurrentHashMap<>(10);
     public enum JoinType {
         /**
          * 关联类型
