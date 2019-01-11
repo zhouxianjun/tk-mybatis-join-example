@@ -21,6 +21,8 @@ public class JoinExampleProvider extends MapperTemplate {
     }
 
     public String selectByJoinExampleEntity(MappedStatement ms) {
+        Class<?> entityClass = this.getEntityClass(ms);
+        this.setResultType(ms, entityClass);
         return selectByJoinExample(ms);
     }
 
