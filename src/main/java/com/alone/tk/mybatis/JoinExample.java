@@ -379,7 +379,7 @@ public class JoinExample {
             return this.andGreaterThan(column(fn, isAlias), value);
         }
 
-        public <T> Where andIncrement(Fn<T, Object> fn, Number increment, String condition, Number value) {
+        public <T> Where andIncrement(Fn<T, Object> fn, Number increment, String condition, Object value) {
             this.criteria.getCriterions().add(new Sqls.Criterion(column(fn, isAlias) + " + " + increment, value, condition, "and"));
             return this;
         }
