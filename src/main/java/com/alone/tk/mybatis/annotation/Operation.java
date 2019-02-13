@@ -1,5 +1,7 @@
 package com.alone.tk.mybatis.annotation;
 
+import com.alone.tk.mybatis.OperationTypes;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -14,7 +16,7 @@ import java.lang.annotation.Target;
 @Target({ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Operation {
-    String value();
+    String value() default OperationTypes.EQUAL;
     boolean and() default true;
     String column() default "";
     String likeFormat() default "%{0}%";
