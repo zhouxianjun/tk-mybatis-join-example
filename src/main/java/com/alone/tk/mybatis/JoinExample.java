@@ -701,14 +701,15 @@ public class JoinExample {
 
         public Where bean(Object bean, String alias, String... ignores) {
             BeanDesc desc = BeanUtil.getBeanDesc(bean.getClass());
-            Between[] betweenArray = AnnotationUtil.getAnnotationValue(bean.getClass(), Betweens.class);
+            Betweens bs = AnnotationUtil.getAnnotation(bean.getClass(), Betweens.class);
+            Between[] betweenArray = bs == null ? null : bs.value();
             List<Between> betweenList;
             if (betweenArray == null) {
                 betweenList = new ArrayList<>(0);
             } else {
                 betweenList = Arrays.stream(betweenArray).collect(Collectors.toList());
             }
-            Between between = AnnotationUtil.getAnnotationValue(bean.getClass(), Between.class);
+            Between between = AnnotationUtil.getAnnotation(bean.getClass(), Between.class);
             if (between != null) {
                 betweenList.add(between);
             }
