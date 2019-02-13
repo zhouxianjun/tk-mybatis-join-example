@@ -736,11 +736,12 @@ public class JoinExample {
                     String condition = OperationTypes.EQUAL;
                     String andOr = AND;
                     String column = prop.getFieldName();
+                    String tName = tableName;
                     if (operation != null) {
                         condition = StrUtil.blankToDefault(operation.value(), condition);
                         andOr = operation.and() ? andOr : OR;
                         column = StrUtil.blankToDefault(operation.column(), column);
-                        tableName = StrUtil.blankToDefault(operation.alias(), tableName);
+                        tName = StrUtil.blankToDefault(operation.alias(), tName);
                     }
                     //自动处理关键字
                     if (SqlReservedWords.containsWord(column)) {
@@ -755,7 +756,7 @@ public class JoinExample {
                         String format = Optional.ofNullable(operation).map(Operation::likeFormat).orElse(LIKE_FORMAT);
                         value = value instanceof CharSequence && !StrUtil.isBlankIfStr(value) ? MessageFormat.format(format, value) : null;
                     }
-                    this.criteria.getCriterions().add(new Sqls.Criterion(tableName + StrUtil.DOT + column, value, condition, andOr));
+                    this.criteria.getCriterions().add(new Sqls.Criterion(tName + StrUtil.DOT + column, value, condition, andOr));
                 }
             }
             for (Between b : betweenList) {
