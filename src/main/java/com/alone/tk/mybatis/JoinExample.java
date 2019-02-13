@@ -27,6 +27,7 @@ import tk.mybatis.mapper.weekend.Fn;
 import tk.mybatis.mapper.weekend.reflection.ReflectionOperationException;
 import tk.mybatis.mapper.weekend.reflection.Reflections;
 
+import javax.persistence.Transient;
 import java.beans.Introspector;
 import java.lang.invoke.SerializedLambda;
 import java.lang.reflect.Method;
@@ -694,6 +695,10 @@ public class JoinExample {
             return this.orNotLike(column(fn, isAlias), value, format);
         }
 
+        public <T> Where bean(Object bean, String alias, Fn<T, Object>... ignores) {
+            return bean(bean, alias, Arrays.stream(ignores).map(f -> column(f, isAlias)).toArray(String[]::new));
+        }
+
         public Where bean(Object bean, String alias, String... ignores) {
             BeanDesc desc = BeanUtil.getBeanDesc(bean.getClass());
             Between[] betweenArray = AnnotationUtil.getAnnotationValue(bean.getClass(), Betweens.class);
@@ -715,6 +720,9 @@ public class JoinExample {
             String tableName = StrUtil.blankToDefault(alias, tableAlias(bean.getClass()));
             for (BeanDesc.PropDesc prop : desc.getProps()) {
                 if (ArrayUtil.contains(ignores, prop.getFieldName())) {
+                    continue;
+                }
+                if (prop.getField().isAnnotationPresent(Transient.class)) {
                     continue;
                 }
                 Object value = prop.getValue(bean);
