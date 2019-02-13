@@ -1,7 +1,14 @@
 package com.alone.tk.mybatis;
 
-import cn.hutool.core.collection.CollectionUtil;
+import cn.hutool.core.annotation.AnnotationUtil;
+import cn.hutool.core.bean.BeanDesc;
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ArrayUtil;
 import cn.hutool.core.util.StrUtil;
+import com.alone.tk.mybatis.annotation.Between;
+import com.alone.tk.mybatis.annotation.Betweens;
+import com.alone.tk.mybatis.annotation.Operation;
 import lombok.*;
 import lombok.experimental.Accessors;
 import tk.mybatis.mapper.annotation.ColumnType;
@@ -26,6 +33,8 @@ import java.lang.reflect.Method;
 import java.text.MessageFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -40,6 +49,24 @@ import java.util.stream.Collectors;
 public class JoinExample {
     private static final Pattern GET_PATTERN = Pattern.compile("^get[A-Z].*");
     private static final Pattern IS_PATTERN  = Pattern.compile("^is[A-Z].*");
+    public static final String LIKE_FORMAT = "%{0}%";
+    public static final String AND = "and";
+    public static final String OR = "or";
+    public static final String PARENTHESIS_START = "(";
+    public static final String PARENTHESIS_END = ")";
+    public static final String ON = "on";
+    public static final String COUNT = "count";
+    public static final String ASTERISK = "*";
+    public static final String AS = "as";
+    public static final String GROUP_CONCAT = "GROUP_CONCAT";
+    public static final String DISTINCT = "distinct";
+    public static final String GRAVE_ACCENT = "`";
+    public static final String DOLLER = "$";
+    public static final String ASC = "asc";
+    public static final String DESC = "desc";
+    public static final String IS = "is";
+    public static final String NULL = "null";
+    public static final String ADD = "+";
     public static final Map<Class, List<Column>> CLASS_COLUMN_MAP = new ConcurrentHashMap<>(10);
     public enum JoinType {
         /**
@@ -60,7 +87,7 @@ public class JoinExample {
 
     private String tableName;
     private String alias;
-    private List<Table> tables = new ArrayList<>();
+    private Set<Table> tables = new HashSet<>();
     private Set<String> selectColumns = new HashSet<>();
     private List<Criteria> exampleCriterias = new ArrayList<>();
     private Map<String, String> orderByMap = new HashMap<>();
@@ -119,20 +146,20 @@ public class JoinExample {
         @Override
         public String toString() {
             EntityTable entityTable = EntityHelper.getEntityTable(tableClass);
-            StringBuilder sb = new StringBuilder(" ");
+            StringBuilder sb = new StringBuilder(StrUtil.SPACE);
             sb.append(type.value)
-                    .append(" ")
+                    .append(StrUtil.SPACE)
                     .append(entityTable.getName())
-                    .append(" ")
+                    .append(StrUtil.SPACE)
                     .append(alias);
-            sb.append(" ON ");
+            sb.append(StrUtil.SPACE).append(ON).append(StrUtil.SPACE);
             Set<Map.Entry<String, String>> entries = on.entrySet();
             int i = 0;
             for (Map.Entry<String, String> entry : entries) {
                 if (i > 0) {
-                    sb.append(" AND ");
+                    sb.append(StrUtil.SPACE).append(AND).append(StrUtil.SPACE);
                 }
-                sb.append(entry.getKey()).append("=").append(entry.getValue());
+                sb.append(entry.getKey()).append(OperationTypes.EQUAL).append(entry.getValue());
                 i++;
             }
             return sb.toString();
@@ -148,7 +175,7 @@ public class JoinExample {
         }
 
         public Builder noAlias() {
-            return setAlias("");
+            return setAlias(StrUtil.EMPTY);
         }
 
         public Builder setAlias(String alias) {
@@ -157,7 +184,13 @@ public class JoinExample {
         }
 
         public Builder addTable(Table table) {
-            example.getTables().add(table);
+            boolean exists = example.getTables().contains(table);
+            if (exists) {
+                exists = example.getTables().stream().anyMatch(t -> t.toString().equals(table.toString()));
+            }
+            if (!exists) {
+                example.getTables().add(table);
+            }
             return this;
         }
 
@@ -167,19 +200,19 @@ public class JoinExample {
         }
 
         public Builder count(String col) {
-            return addCol("count(" + col + ")");
+            return addCol(COUNT + PARENTHESIS_START + col + PARENTHESIS_END);
         }
 
         public <T> Builder count(Fn<T, Object> fn) {
-            return addCol("count(" + column(fn) + ")");
+            return addCol(COUNT + PARENTHESIS_START + column(fn) + PARENTHESIS_END);
         }
 
         public Builder count() {
-            return addCol("count(*)");
+            return addCol(COUNT + PARENTHESIS_START + ASTERISK + PARENTHESIS_END);
         }
 
         public Builder addCol(String col, String alias) {
-            example.getSelectColumns().add(col + " AS " + alias);
+            example.getSelectColumns().add(col + StrUtil.SPACE + AS + StrUtil.SPACE + alias);
             return this;
         }
 
@@ -187,14 +220,14 @@ public class JoinExample {
             return addCol(column(fn));
         }
         public <T> Builder addGroupCol(Fn<T, Object> fn, boolean isDistinct, String alias) {
-            return addCol("GROUP_CONCAT(" + (isDistinct ? "distinct " : "") + column(fn) + ")", alias);
+            return addCol(GROUP_CONCAT + PARENTHESIS_START + (isDistinct ? (DISTINCT + StrUtil.SPACE) : StrUtil.EMPTY) + column(fn) + PARENTHESIS_END, alias);
         }
         public <T> Builder addGroupCol(Fn<T, Object> fn, String alias) {
             return addGroupCol(fn, false, alias);
         }
 
         public <T> Builder addCol(Fn<T, Object> fn, String alias) {
-            return addCol(column(fn) + " AS " + alias);
+            return addCol(column(fn) + StrUtil.SPACE + AS + StrUtil.SPACE + alias);
         }
 
         public <T,A> Builder addCol(Fn<T, Object> fn, Fn<A, Object> alias) {
@@ -209,10 +242,10 @@ public class JoinExample {
             Set<EntityColumn> columnSet = EntityHelper.getColumns(entityClass);
             String cName = tableAlias == null ? tableAlias(entityClass) : tableAlias;
             columnSet.forEach(col -> {
-                if (!col.getColumn().replace("`", "").equals(col.getProperty()) || StrUtil.isNotBlank(childName)) {
-                    addCol(cName + "." + col.getColumn() + " AS " + (StrUtil.isNotBlank(childName) ? childName + "$" + col.getProperty() : col.getProperty()));
+                if (!col.getColumn().replace(GRAVE_ACCENT, StrUtil.EMPTY).equals(col.getProperty()) || StrUtil.isNotBlank(childName)) {
+                    addCol(cName + StrUtil.DOT + col.getColumn() + StrUtil.SPACE + AS + StrUtil.SPACE + (StrUtil.isNotBlank(childName) ? childName + DOLLER + col.getProperty() : col.getProperty()));
                 } else {
-                    addCol(cName + "." + col.getColumn());
+                    addCol(cName + StrUtil.DOT + col.getColumn());
                 }
             });
             return this;
@@ -225,7 +258,7 @@ public class JoinExample {
         }
 
         public Builder asc(String col) {
-            example.getOrderByMap().put(col, "asc");
+            example.getOrderByMap().put(col, ASC);
             return this;
         }
         public <T> Builder asc(Fn<T, Object> fn) {
@@ -233,7 +266,7 @@ public class JoinExample {
         }
 
         public Builder desc(String col) {
-            example.getOrderByMap().put(col, "desc");
+            example.getOrderByMap().put(col, DESC);
             return this;
         }
         public <T> Builder desc(Fn<T, Object> fn) {
@@ -252,19 +285,19 @@ public class JoinExample {
             example.getGroups().add(col);
             return this;
         }
+
         public <T> Builder groupBy(Fn<T, Object> fn) {
             return groupBy(column(fn));
         }
 
-
         public JoinExample build() {
             Set<String> sets = new HashSet<>(1);
             example.getSelectColumns().removeIf(name -> {
-                if (name.contains(" ")) {
-                    name = StrUtil.subAfter(name, " ", true);
+                if (name.contains(StrUtil.SPACE)) {
+                    name = StrUtil.subAfter(name, StrUtil.SPACE, true);
                 }
-                if (name.contains(".")) {
-                    name = StrUtil.subAfter(name, ".", true);
+                if (name.contains(StrUtil.DOT)) {
+                    name = StrUtil.subAfter(name, StrUtil.DOT, true);
                 }
                 return !sets.add(name);
             });
@@ -299,13 +332,13 @@ public class JoinExample {
         private Sqls.Criterion criterion;
 
         public boolean isListValue() {
-            return criterion.getValue() instanceof Collection;
+            return criterion.getValue() instanceof Iterable;
         }
         public boolean isSingleValue() {
             return !isListValue();
         }
         public boolean isBetweenValue() {
-            return criterion.getValue() != null && criterion.getSecondValue() != null && criterion.getCondition().contains("between");
+            return criterion.getValue() != null && criterion.getSecondValue() != null && criterion.getCondition().contains(OperationTypes.BETWEEN);
         }
         public boolean isNoValue() {
             return criterion.getValue() == null && criterion.getSecondValue() == null;
@@ -329,13 +362,24 @@ public class JoinExample {
             return new Where();
         }
 
+        public Where optional(boolean is, Consumer<Where> where) {
+            if (is) {
+                where.accept(this);
+            }
+            return this;
+        }
+
+        public Where optional(Supplier<Boolean> is, Consumer<Where> where) {
+            return optional(is.get(), where);
+        }
+
         public Where allowNullValue() {
             this.isNullValue = true;
             return this;
         }
 
         public Where andIsNull(String property) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, "is null", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, OperationTypes.IS_NULL, AND));
             return this;
         }
 
@@ -344,7 +388,7 @@ public class JoinExample {
         }
 
         public Where andIsNotNull(String property) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, "is not null", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, OperationTypes.IS_NOT_NULL, AND));
             return this;
         }
 
@@ -353,7 +397,7 @@ public class JoinExample {
         }
 
         public Where andEqualTo(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "=", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.EQUAL, AND));
             return this;
         }
 
@@ -362,7 +406,7 @@ public class JoinExample {
         }
 
         public Where andNotEqualTo(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "<>", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.NOT_EQUAL, AND));
             return this;
         }
 
@@ -371,7 +415,7 @@ public class JoinExample {
         }
 
         public Where andGreaterThan(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, ">", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.GREATER_THAN, AND));
             return this;
         }
 
@@ -380,27 +424,27 @@ public class JoinExample {
         }
 
         public <T> Where andIncrement(Fn<T, Object> fn, Number increment, String condition, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(column(fn, isAlias) + " + " + increment, value, condition, "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(column(fn, isAlias) + StrUtil.SPACE + ADD + StrUtil.SPACE + increment, value, condition, AND));
             return this;
         }
 
         public <T> Where andIncrement(Fn<T, Object> fn, Number increment, String condition, Fn<T, Object> col) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(column(fn, isAlias) + " + " + increment, condition + " " + column(col, isAlias), "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(column(fn, isAlias) + StrUtil.SPACE + ADD + StrUtil.SPACE + increment, condition + StrUtil.SPACE + column(col, isAlias), AND));
             return this;
         }
 
         public Where andIncrement(String property, Number increment, String condition, Number value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property + " + " + increment, value, condition, "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property + StrUtil.SPACE + ADD + StrUtil.SPACE + increment, value, condition, AND));
             return this;
         }
 
         public Where andIncrement(String property, Number increment, String condition, String col) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property + " + " + increment, condition + " " + col, "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property + StrUtil.SPACE + ADD + StrUtil.SPACE + increment, condition + StrUtil.SPACE + col, AND));
             return this;
         }
 
         public Where andGreaterThanOrEqualTo(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, ">=", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.GREATER_THAN_OR_EQUAL, AND));
             return this;
         }
 
@@ -409,7 +453,7 @@ public class JoinExample {
         }
 
         public Where andLessThan(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "<", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.LESS_THAN, AND));
             return this;
         }
 
@@ -418,7 +462,7 @@ public class JoinExample {
         }
 
         public Where andLessThanOrEqualTo(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "<=", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.LESS_THAN_OR_EQUAL, AND));
             return this;
         }
 
@@ -427,7 +471,7 @@ public class JoinExample {
         }
 
         public Where andIn(String property, Iterable values) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, values, "in", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, values, OperationTypes.IN, AND));
             return this;
         }
 
@@ -436,7 +480,7 @@ public class JoinExample {
         }
 
         public Where andNotIn(String property, Iterable values) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, values, "not in", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, values, OperationTypes.NOT_IN, AND));
             return this;
         }
 
@@ -445,7 +489,7 @@ public class JoinExample {
         }
 
         public Where andBetween(String property, Object value1, Object value2) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value1, value2, "between", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value1, value2, OperationTypes.BETWEEN, AND));
             return this;
         }
 
@@ -454,7 +498,7 @@ public class JoinExample {
         }
 
         public Where andNotBetween(String property, Object value1, Object value2) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value1, value2, "not between", "and"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value1, value2, OperationTypes.NOT_BETWEEN, AND));
             return this;
         }
 
@@ -463,14 +507,19 @@ public class JoinExample {
         }
 
         public Where andLike(String property, String value, String format) {
+            return like(property, value, format, OperationTypes.LIKE, AND);
+        }
+
+        private Where like(String property, String value, String format, String condition, String andOr) {
             if (StrUtil.isNotBlank(value)) {
                 value = MessageFormat.format(format, value);
-                this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "like", "and"));
+                this.criteria.getCriterions().add(new Sqls.Criterion(property, value, condition, andOr));
             }
             return this;
         }
+
         public Where andLike(String property, String value) {
-            return andLike(property, value, "%{0}%");
+            return andLike(property, value, LIKE_FORMAT);
         }
 
         public <T> Where andLike(Fn<T, Object> fn, String value) {
@@ -481,14 +530,10 @@ public class JoinExample {
         }
 
         public Where andNotLike(String property, String value, String format) {
-            if (StrUtil.isNotBlank(value)) {
-                value = MessageFormat.format(format, value);
-                this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "not like", "and"));
-            }
-            return this;
+            return like(property, value, format, OperationTypes.NOT_LIKE, AND);
         }
         public Where andNotLike(String property, String value) {
-            return andNotLike(property, value, "%{0}%");
+            return andNotLike(property, value, LIKE_FORMAT);
         }
 
         public <T> Where andNotLike(Fn<T, Object> fn, String value) {
@@ -499,7 +544,7 @@ public class JoinExample {
         }
 
         public Where orIsNull(String property) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, "is null", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, OperationTypes.IS_NULL, OR));
             return this;
         }
 
@@ -508,7 +553,7 @@ public class JoinExample {
         }
 
         public Where orIsNotNull(String property) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, "is not null", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, OperationTypes.IS_NOT_NULL, OR));
             return this;
         }
 
@@ -517,16 +562,16 @@ public class JoinExample {
         }
 
         public Where orEqualTo(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "=", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.EQUAL, OR));
             return this;
         }
 
-        public <T> Where orEqualTo(Fn<T, Object> fn, String value) {
+        public <T> Where orEqualTo(Fn<T, Object> fn, Object value) {
             return this.orEqualTo(column(fn, isAlias), value);
         }
 
         public Where orNotEqualTo(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "<>", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.NOT_EQUAL, OR));
             return this;
         }
 
@@ -535,7 +580,7 @@ public class JoinExample {
         }
 
         public Where orGreaterThan(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, ">", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.GREATER_THAN, OR));
             return this;
         }
 
@@ -544,7 +589,7 @@ public class JoinExample {
         }
 
         public Where orGreaterThanOrEqualTo(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, ">=", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.GREATER_THAN_OR_EQUAL, OR));
             return this;
         }
 
@@ -553,7 +598,7 @@ public class JoinExample {
         }
 
         public Where orLessThan(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "<", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.LESS_THAN, OR));
             return this;
         }
 
@@ -562,7 +607,7 @@ public class JoinExample {
         }
 
         public Where orLessThanOrEqualTo(String property, Object value) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "<=", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value, OperationTypes.LESS_THAN_OR_EQUAL, OR));
             return this;
         }
 
@@ -571,7 +616,7 @@ public class JoinExample {
         }
 
         public Where orIn(String property, Iterable values) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, values, "in", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, values, OperationTypes.IN, OR));
             return this;
         }
 
@@ -580,7 +625,7 @@ public class JoinExample {
         }
 
         public Where orNotIn(String property, Iterable values) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, values, "not in", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, values, OperationTypes.NOT_IN, OR));
             return this;
         }
 
@@ -589,7 +634,7 @@ public class JoinExample {
         }
 
         public Where orBetween(String property, Object value1, Object value2) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value1, value2, "between", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value1, value2, OperationTypes.BETWEEN, OR));
             return this;
         }
 
@@ -598,7 +643,7 @@ public class JoinExample {
         }
 
         public Where orNotBetween(String property, Object value1, Object value2) {
-            this.criteria.getCriterions().add(new Sqls.Criterion(property, value1, value2, "not between", "or"));
+            this.criteria.getCriterions().add(new Sqls.Criterion(property, value1, value2, OperationTypes.NOT_BETWEEN, OR));
             return this;
         }
 
@@ -607,7 +652,7 @@ public class JoinExample {
         }
 
         public Where orLike(String property, String value) {
-            return this.orLike(property, value, "%{0}%");
+            return this.orLike(property, value, LIKE_FORMAT);
         }
 
         public <T> Where orLike(Fn<T, Object> fn, String value) {
@@ -615,11 +660,7 @@ public class JoinExample {
         }
 
         public Where orLike(String property, String value, String format) {
-            if (StrUtil.isNotBlank(value)) {
-                value = MessageFormat.format(format, value);
-                this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "like", "or"));
-            }
-            return this;
+            return like(property, value, format, OperationTypes.LIKE, OR);
         }
 
         public <T> Where orLike(Fn<T, Object> fn, String value, String format) {
@@ -627,15 +668,11 @@ public class JoinExample {
         }
 
         public Where orNotLike(String property, String value) {
-            return this.orNotLike(property, value, "%{0}%");
+            return this.orNotLike(property, value, LIKE_FORMAT);
         }
 
         public Where orNotLike(String property, String value, String format) {
-            if (StrUtil.isNotBlank(value)) {
-                value = MessageFormat.format(format, value);
-                this.criteria.getCriterions().add(new Sqls.Criterion(property, value, "not like", "or"));
-            }
-            return this;
+            return like(property, value, format, OperationTypes.NOT_LIKE, OR);
         }
 
         public <T> Where orNotLike(Fn<T, Object> fn, String value) {
@@ -646,12 +683,78 @@ public class JoinExample {
             return this.orNotLike(column(fn, isAlias), value, format);
         }
 
+        public Where bean(Object bean, String alias, String... ignores) {
+            BeanDesc desc = BeanUtil.getBeanDesc(bean.getClass());
+            Between[] betweenArray = AnnotationUtil.getAnnotationValue(bean.getClass(), Betweens.class);
+            List<Between> betweenList;
+            if (betweenArray == null) {
+                betweenList = new ArrayList<>(0);
+            } else {
+                betweenList = Arrays.stream(betweenArray).collect(Collectors.toList());
+            }
+            Between between = AnnotationUtil.getAnnotationValue(bean.getClass(), Between.class);
+            if (between != null) {
+                betweenList.add(between);
+            }
+            Map<String, Object> betweenMap = new HashMap<>(betweenList.size() * 2);
+            for (Between b : betweenList) {
+                betweenMap.put(b.start(), null);
+                betweenMap.put(b.end(), null);
+            }
+            String tableName = StrUtil.blankToDefault(alias, tableAlias(bean.getClass()));
+            for (BeanDesc.PropDesc prop : desc.getProps()) {
+                if (ArrayUtil.contains(ignores, prop.getFieldName())) {
+                    continue;
+                }
+                Object value = prop.getValue(bean);
+                if (value != null) {
+                    if (betweenMap.containsKey(prop.getFieldName())) {
+                        betweenMap.put(prop.getFieldName(), value);
+                        continue;
+                    }
+                    Operation operation = AnnotationUtil.getAnnotation(prop.getFieldClass(), Operation.class);
+                    String condition = OperationTypes.EQUAL;
+                    String andOr = AND;
+                    String column = prop.getFieldName();
+                    if (operation != null) {
+                        condition = StrUtil.blankToDefault(operation.value(), condition);
+                        andOr = operation.and() ? andOr : OR;
+                        column = StrUtil.blankToDefault(operation.column(), column);
+                    }
+                    //自动处理关键字
+                    if (SqlReservedWords.containsWord(column)) {
+                        column = MessageFormat.format("`{0}`", column);
+                    }
+                    if (value instanceof Iterable) {
+                        if (!OperationTypes.IN.equals(condition) && !OperationTypes.NOT_IN.equals(condition)) {
+                            throw new RuntimeException(StrUtil.format("属性:{} 值为 Iterable 但 条件为 {}", prop.getFieldName(), condition));
+                        }
+                    }
+                    if (condition.equals(OperationTypes.NOT_LIKE) || condition.equals(OperationTypes.LIKE)) {
+                        String format = Optional.ofNullable(operation).map(Operation::likeFormat).orElse(LIKE_FORMAT);
+                        value = value instanceof CharSequence && !StrUtil.isBlankIfStr(value) ? MessageFormat.format(format, value) : null;
+                    }
+                    this.criteria.getCriterions().add(new Sqls.Criterion(tableName + StrUtil.DOT + column, value, condition, andOr));
+                }
+            }
+            for (Between b : betweenList) {
+                this.criteria.getCriterions().add(new Sqls.Criterion(
+                        tableName + StrUtil.DOT + b.value(),
+                        betweenMap.get(b.start()),
+                        betweenMap.get(b.end()),
+                        b.not() ? OperationTypes.NOT_BETWEEN : OperationTypes.BETWEEN,
+                        b.and() ? AND : OR
+                ));
+            }
+            return this;
+        }
+
         @Override
         public Sqls.Criteria getCriteria() {
             if (!isNullValue) {
                 this.criteria.getCriterions().removeIf(criterion ->
-                        (!criterion.getCondition().contains("null") && criterion.getValue() == null)
-                        || (criterion.getValue() instanceof Collection && CollectionUtil.isEmpty((Collection<?>) criterion.getValue()))
+                        (!criterion.getCondition().contains(NULL) && criterion.getValue() == null)
+                        || (criterion.getValue() instanceof Iterable && CollUtil.isEmpty((Iterable<?>) criterion.getValue()))
                 );
             }
             return criteria;
@@ -680,14 +783,14 @@ public class JoinExample {
         private List<Sqls.Criteria> sqlsCriteria = new ArrayList<>();
         public T where(Sqls sqls) {
             Sqls.Criteria criteria = sqls.getCriteria();
-            criteria.setAndOr("and");
+            criteria.setAndOr(AND);
             this.sqlsCriteria.add(criteria);
             return (T) this;
         }
 
         public T where(SqlsCriteria sqls) {
             Sqls.Criteria criteria = sqls.getCriteria();
-            criteria.setAndOr("and");
+            criteria.setAndOr(AND);
             this.sqlsCriteria.add(criteria);
             return (T) this;
         }
@@ -697,11 +800,11 @@ public class JoinExample {
             String tableName = StrUtil.blankToDefault(alias, tableAlias(object.getClass()));
             criteria.getCriterions().addAll(getColumns(object.getClass()).stream()
                     .filter(column -> !column.isNullValueAbsent(object))
-                    .map(column -> new Sqls.Criterion(tableName + "." + column.getName(), column.getValue(), " = ", "and"))
+                    .map(column -> new Sqls.Criterion(tableName + StrUtil.DOT + column.getName(), column.getValue(), StrUtil.SPACE + OperationTypes.EQUAL + StrUtil.SPACE, AND))
                     .collect(Collectors.toList())
             );
 
-            criteria.setAndOr("and");
+            criteria.setAndOr(AND);
             this.sqlsCriteria.add(criteria);
             return (T) this;
         }
@@ -712,28 +815,28 @@ public class JoinExample {
 
         public T andWhere(Sqls sqls) {
             Sqls.Criteria criteria = sqls.getCriteria();
-            criteria.setAndOr("and");
+            criteria.setAndOr(AND);
             this.sqlsCriteria.add(criteria);
             return (T) this;
         }
 
         public T andWhere(SqlsCriteria sqls) {
             Sqls.Criteria criteria = sqls.getCriteria();
-            criteria.setAndOr("and");
+            criteria.setAndOr(AND);
             this.sqlsCriteria.add(criteria);
             return (T) this;
         }
 
         public T orWhere(Sqls sqls) {
             Sqls.Criteria criteria = sqls.getCriteria();
-            criteria.setAndOr("or");
+            criteria.setAndOr(OR);
             this.sqlsCriteria.add(criteria);
             return (T) this;
         }
 
         public T orWhere(SqlsCriteria sqls) {
             Sqls.Criteria criteria = sqls.getCriteria();
-            criteria.setAndOr("or");
+            criteria.setAndOr(OR);
             this.sqlsCriteria.add(criteria);
             return (T) this;
         }
@@ -767,10 +870,10 @@ public class JoinExample {
                 getter = getter.substring(2);
             }
             String fieldName = Introspector.decapitalize(getter);
-            Class c = fn.getClass().getClassLoader().loadClass(serializedLambda.getImplClass().replace("/", "."));
+            Class c = fn.getClass().getClassLoader().loadClass(serializedLambda.getImplClass().replace(StrUtil.SLASH, StrUtil.DOT));
             Optional<Column> optional = getColumns(c).stream().filter(col -> col.getField().getName().equals(fieldName)).findFirst();
             Column column = optional.orElseThrow(ReflectionOperationException::new);
-            return alias ? tableAlias(c) + "." + column.getName() : column.getName();
+            return alias ? tableAlias(c) + StrUtil.DOT + column.getName() : column.getName();
         } catch (ReflectiveOperationException e) {
             throw new ReflectionOperationException(e);
         }
