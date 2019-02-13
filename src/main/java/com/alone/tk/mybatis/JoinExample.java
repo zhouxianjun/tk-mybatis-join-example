@@ -760,7 +760,7 @@ public class JoinExample {
             }
             for (Between b : betweenList) {
                 this.criteria.getCriterions().add(new Sqls.Criterion(
-                        tableName + StrUtil.DOT + b.value(),
+                        b.value(),
                         betweenMap.get(b.start()),
                         betweenMap.get(b.end()),
                         b.not() ? OperationTypes.NOT_BETWEEN : OperationTypes.BETWEEN,
