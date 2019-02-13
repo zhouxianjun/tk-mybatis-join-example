@@ -183,6 +183,17 @@ public class JoinExample {
             return this;
         }
 
+        public Builder optional(boolean is, Consumer<Builder> builder) {
+            if (is) {
+                builder.accept(this);
+            }
+            return this;
+        }
+
+        public Builder optional(Supplier<Boolean> is, Consumer<Builder> builder) {
+            return optional(is.get(), builder);
+        }
+
         public Builder addTable(Table table) {
             boolean exists = example.getTables().contains(table);
             if (exists) {
