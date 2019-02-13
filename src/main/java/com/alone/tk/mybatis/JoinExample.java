@@ -739,6 +739,7 @@ public class JoinExample {
                         condition = StrUtil.blankToDefault(operation.value(), condition);
                         andOr = operation.and() ? andOr : OR;
                         column = StrUtil.blankToDefault(operation.column(), column);
+                        tableName = StrUtil.blankToDefault(operation.alias(), tableName);
                     }
                     //自动处理关键字
                     if (SqlReservedWords.containsWord(column)) {

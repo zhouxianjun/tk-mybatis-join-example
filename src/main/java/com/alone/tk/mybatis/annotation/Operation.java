@@ -20,4 +20,5 @@ public @interface Operation {
     boolean and() default true;
     String column() default "";
     String likeFormat() default "%{0}%";
+    String alias() default "";
 }
