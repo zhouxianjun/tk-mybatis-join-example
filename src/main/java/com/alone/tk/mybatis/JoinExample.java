@@ -732,7 +732,7 @@ public class JoinExample {
                         betweenMap.put(prop.getFieldName(), value);
                         continue;
                     }
-                    Operation operation = AnnotationUtil.getAnnotation(prop.getFieldClass(), Operation.class);
+                    Operation operation = AnnotationUtil.getAnnotation(prop.getField(), Operation.class);
                     String condition = OperationTypes.EQUAL;
                     String andOr = AND;
                     String column = prop.getFieldName();
