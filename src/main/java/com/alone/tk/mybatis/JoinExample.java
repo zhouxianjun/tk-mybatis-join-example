@@ -88,9 +88,9 @@ public class JoinExample {
 
     private String tableName;
     private String alias;
-    private Set<Table> tables = new HashSet<>();
-    private Set<String> selectColumns = new HashSet<>();
-    private List<Criteria> exampleCriterias = new ArrayList<>();
+    private List<Table> tables = new ArrayList<>(0);
+    private Set<String> selectColumns = new HashSet<>(0);
+    private List<Criteria> exampleCriterias = new ArrayList<>(1);
     private Map<String, String> orderByMap = new HashMap<>();
     private Set<String> groups = new HashSet<>(0);
 
