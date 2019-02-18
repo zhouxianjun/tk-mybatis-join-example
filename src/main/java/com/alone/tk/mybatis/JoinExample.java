@@ -4,7 +4,6 @@ import cn.hutool.core.annotation.AnnotationUtil;
 import cn.hutool.core.bean.BeanDesc;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.ArrayUtil;
 import cn.hutool.core.util.StrUtil;
 import com.alone.tk.mybatis.annotation.Between;
 import com.alone.tk.mybatis.annotation.Betweens;
@@ -698,18 +697,25 @@ public class JoinExample {
             return this.orNotLike(column(fn, isAlias), value, format);
         }
 
-        public <T> Where bean(Object bean, String alias, Fn<T, Object>... ignores) {
-            return bean(bean, alias, Arrays.stream(ignores).map(f -> column(f, isAlias)).toArray(String[]::new));
+        public <T> Where beanIgnore(Object bean, String alias, Set<Fn<T, Object>> ignores) {
+            return bean(bean, alias, ignores.stream().map(f -> column(f, isAlias)).collect(Collectors.toSet()));
         }
 
-        public <T> Where bean(Object bean, Fn<T, Object>... ignores) {
-            return bean(bean, tableAlias(bean.getClass()), Arrays.stream(ignores).map(f -> column(f, isAlias)).toArray(String[]::new));
+        public <T> Where beanIgnore(Object bean, Set<Fn<T, Object>> ignores) {
+            return bean(bean, tableAlias(bean.getClass()), ignores.stream().map(f -> column(f, isAlias)).collect(Collectors.toSet()));
         }
-        public <T> Where bean(Object bean, String... ignores) {
+        public <T> Where bean(Object bean, Set<String> ignores) {
             return bean(bean, tableAlias(bean.getClass()), ignores);
         }
+        public <T> Where bean(Object bean, String alias) {
+            return bean(bean, alias, null);
+        }
+        public <T> Where bean(Object bean) {
+            return bean(bean, tableAlias(bean.getClass()), null);
+        }
 
-        public Where bean(Object bean, String alias, String... ignores) {
+        public Where bean(Object bean, String alias, Set<String> ignores) {
+            ignores = Optional.ofNullable(ignores).orElse(Collections.emptySet());
             BeanDesc desc = BeanUtil.getBeanDesc(bean.getClass());
             Betweens bs = AnnotationUtil.getAnnotation(bean.getClass(), Betweens.class);
             Between[] betweenArray = bs == null ? null : bs.value();
@@ -730,7 +736,7 @@ public class JoinExample {
             }
             String tableName = StrUtil.blankToDefault(alias, tableAlias(bean.getClass()));
             for (BeanDesc.PropDesc prop : desc.getProps()) {
-                if (ArrayUtil.contains(ignores, prop.getFieldName())) {
+                if (ignores.contains(prop.getFieldName())) {
                     continue;
                 }
                 if (prop.getField().isAnnotationPresent(Transient.class)) {
