@@ -210,6 +210,11 @@ public class JoinExample {
             return this;
         }
 
+        public Builder all() {
+            example.getSelectColumns().add(ASTERISK);
+            return this;
+        }
+
         public Builder count(String col) {
             return addCol(COUNT + PARENTHESIS_START + col + PARENTHESIS_END);
         }
