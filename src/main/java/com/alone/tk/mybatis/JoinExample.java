@@ -304,6 +304,9 @@ public class JoinExample {
 
         public JoinExample build() {
             Set<String> sets = new HashSet<>(1);
+            if (CollUtil.isEmpty(example.getSelectColumns()) && CollUtil.isNotEmpty(example.getTables())) {
+                addCol(example.alias + StrUtil.DOT + ASTERISK);
+            }
             example.getSelectColumns().removeIf(name -> {
                 if (name.contains(StrUtil.SPACE)) {
                     name = StrUtil.subAfter(name, StrUtil.SPACE, true);
@@ -699,6 +702,13 @@ public class JoinExample {
             return bean(bean, alias, Arrays.stream(ignores).map(f -> column(f, isAlias)).toArray(String[]::new));
         }
 
+        public <T> Where bean(Object bean, Fn<T, Object>... ignores) {
+            return bean(bean, tableAlias(bean.getClass()), Arrays.stream(ignores).map(f -> column(f, isAlias)).toArray(String[]::new));
+        }
+        public <T> Where bean(Object bean, String... ignores) {
+            return bean(bean, tableAlias(bean.getClass()), ignores);
+        }
+
         public Where bean(Object bean, String alias, String... ignores) {
             BeanDesc desc = BeanUtil.getBeanDesc(bean.getClass());
             Betweens bs = AnnotationUtil.getAnnotation(bean.getClass(), Betweens.class);
@@ -952,7 +962,7 @@ public class JoinExample {
                 && !SimpleTypeUtil.isSimpleType(field.getJavaType()));
     }
 
-    private static String tableAlias(Class c) {
+    public static String tableAlias(Class c) {
         String alias = StrUtil.toUnderlineCase(c.getSimpleName());
         //自动处理关键字
         if (SqlReservedWords.containsWord(alias)) {
