@@ -354,7 +354,7 @@ public class JoinExample {
             return criterion.getValue() instanceof Iterable;
         }
         public boolean isSingleValue() {
-            return !isListValue();
+            return !isListValue() && criterion.getSecondValue() == null;
         }
         public boolean isBetweenValue() {
             return criterion.getValue() != null && criterion.getSecondValue() != null && criterion.getCondition().contains(OperationTypes.BETWEEN);
