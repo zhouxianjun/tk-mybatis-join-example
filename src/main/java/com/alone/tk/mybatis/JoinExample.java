@@ -8,6 +8,7 @@ import cn.hutool.core.util.StrUtil;
 import com.alone.tk.mybatis.annotation.Between;
 import com.alone.tk.mybatis.annotation.Betweens;
 import com.alone.tk.mybatis.annotation.Operation;
+import com.alone.tk.mybatis.annotation.QueryIgnoreColumn;
 import lombok.*;
 import lombok.experimental.Accessors;
 import tk.mybatis.mapper.annotation.ColumnType;
@@ -48,7 +49,7 @@ import java.util.stream.Collectors;
 @Accessors(chain = true)
 public class JoinExample {
     private static final Pattern GET_PATTERN = Pattern.compile("^get[A-Z].*");
-    private static final Pattern IS_PATTERN  = Pattern.compile("^is[A-Z].*");
+    private static final Pattern IS_PATTERN = Pattern.compile("^is[A-Z].*");
     public static final String LIKE_FORMAT = "%{0}%";
     public static final String AND = "and";
     public static final String OR = "or";
@@ -68,6 +69,7 @@ public class JoinExample {
     public static final String NULL = "null";
     public static final String ADD = "+";
     public static final Map<Class, List<Column>> CLASS_COLUMN_MAP = new ConcurrentHashMap<>(10);
+
     public enum JoinType {
         /**
          * 关联类型
@@ -107,24 +109,31 @@ public class JoinExample {
             this.type = type;
             this.and(col1, col2);
         }
+
         public Table(Class tableClass, String col1, String col2) {
             this(tableClass, JoinType.JOIN, col1, col2);
         }
-        public <T,E> Table(Class tableClass, JoinType type, Fn<E, Object> fn1, Fn<T, Object> fn2) {
+
+        public <T, E> Table(Class tableClass, JoinType type, Fn<E, Object> fn1, Fn<T, Object> fn2) {
             this(tableClass, type, column(fn1), column(fn2));
         }
-        public <T,E> Table(Class tableClass, Fn<E, Object> fn1, Fn<T, Object> fn2) {
+
+        public <T, E> Table(Class tableClass, Fn<E, Object> fn1, Fn<T, Object> fn2) {
             this(tableClass, JoinType.JOIN, column(fn1), column(fn2));
         }
+
         public <T> Table(Class tableClass, JoinType type, String col1, Fn<T, Object> fn2) {
             this(tableClass, type, col1, column(fn2));
         }
+
         public <T> Table(Class tableClass, String col1, Fn<T, Object> fn2) {
             this(tableClass, JoinType.JOIN, col1, column(fn2));
         }
+
         public <T> Table(Class tableClass, JoinType type, Fn<T, Object> fn, String col2) {
             this(tableClass, type, column(fn), col2);
         }
+
         public <T> Table(Class tableClass, Fn<T, Object> fn, String col2) {
             this(tableClass, JoinType.JOIN, column(fn), col2);
         }
@@ -133,13 +142,16 @@ public class JoinExample {
             this.on.put(col1, StrUtil.utf8Str(col2));
             return this;
         }
+
         public <T> Table and(String col1, Fn<T, Object> fn) {
             return and(col1, column(fn));
         }
+
         public <T> Table and(Fn<T, Object> fn, Object col2) {
             return and(column(fn), col2);
         }
-        public <T,E> Table and(Fn<E, Object> fn1, Fn<T, Object> fn2) {
+
+        public <T, E> Table and(Fn<E, Object> fn1, Fn<T, Object> fn2) {
             return and(column(fn1), column(fn2));
         }
 
@@ -215,6 +227,11 @@ public class JoinExample {
             return this;
         }
 
+        public Builder all(Class entityClass) {
+            example.getSelectColumns().add(tableAlias(entityClass) + StrUtil.DOT + ASTERISK);
+            return this;
+        }
+
         public Builder count(String col) {
             return addCol(COUNT + PARENTHESIS_START + col + PARENTHESIS_END);
         }
@@ -235,9 +252,11 @@ public class JoinExample {
         public <T> Builder addCol(Fn<T, Object> fn) {
             return addCol(column(fn));
         }
+
         public <T> Builder addGroupCol(Fn<T, Object> fn, boolean isDistinct, String alias) {
             return addCol(GROUP_CONCAT + PARENTHESIS_START + (isDistinct ? (DISTINCT + StrUtil.SPACE) : StrUtil.EMPTY) + column(fn) + PARENTHESIS_END, alias);
         }
+
         public <T> Builder addGroupCol(Fn<T, Object> fn, String alias) {
             return addGroupCol(fn, false, alias);
         }
@@ -246,7 +265,7 @@ public class JoinExample {
             return addCol(column(fn) + StrUtil.SPACE + AS + StrUtil.SPACE + alias);
         }
 
-        public <T,A> Builder addCol(Fn<T, Object> fn, Fn<A, Object> alias) {
+        public <T, A> Builder addCol(Fn<T, Object> fn, Fn<A, Object> alias) {
             return addCol(fn, Reflections.fnToFieldName(alias));
         }
 
@@ -257,26 +276,35 @@ public class JoinExample {
         public Builder addCol(Class entityClass, String tableAlias, String childName) {
             Set<EntityColumn> columnSet = EntityHelper.getColumns(entityClass);
             String cName = tableAlias == null ? tableAlias(entityClass) : tableAlias;
-            columnSet.forEach(col -> {
-                if (!col.getColumn().replace(GRAVE_ACCENT, StrUtil.EMPTY).equals(col.getProperty()) || StrUtil.isNotBlank(childName)) {
-                    addCol(cName + StrUtil.DOT + col.getColumn() + StrUtil.SPACE + AS + StrUtil.SPACE + (StrUtil.isNotBlank(childName) ? childName + DOLLER + col.getProperty() : col.getProperty()));
-                } else {
-                    addCol(cName + StrUtil.DOT + col.getColumn());
-                }
-            });
+            columnSet.stream()
+                    .filter(col -> !col.getEntityField().isAnnotationPresent(QueryIgnoreColumn.class))
+                    .forEach(col -> {
+                        if (!col.getColumn().replace(GRAVE_ACCENT, StrUtil.EMPTY).equals(col.getProperty()) || StrUtil.isNotBlank(childName)) {
+                            addCol(cName + StrUtil.DOT + col.getColumn() + StrUtil.SPACE + AS + StrUtil.SPACE + (StrUtil.isNotBlank(childName) ? childName + DOLLER + col.getProperty() : col.getProperty()));
+                        } else {
+                            addCol(cName + StrUtil.DOT + col.getColumn());
+                        }
+                    });
             return this;
         }
+
         public Builder addCol(Class entityClass, String childName) {
             return addCol(entityClass, null, childName);
         }
+
+        public <A> Builder addCol(Class entityClass, Fn<A, Object> childName) {
+            return addCol(entityClass, Reflections.fnToFieldName(childName));
+        }
+
         public Builder addCol(Class entityClass) {
-            return addCol(entityClass, null);
+            return addCol(entityClass, null, null);
         }
 
         public Builder asc(String col) {
             example.getOrderByMap().put(col, ASC);
             return this;
         }
+
         public <T> Builder asc(Fn<T, Object> fn) {
             return asc(column(fn));
         }
@@ -285,6 +313,7 @@ public class JoinExample {
             example.getOrderByMap().put(col, DESC);
             return this;
         }
+
         public <T> Builder desc(Fn<T, Object> fn) {
             return desc(column(fn));
         }
@@ -353,12 +382,15 @@ public class JoinExample {
         public boolean isListValue() {
             return criterion.getValue() instanceof Iterable;
         }
+
         public boolean isSingleValue() {
             return !isListValue() && criterion.getSecondValue() == null;
         }
+
         public boolean isBetweenValue() {
             return criterion.getValue() != null && criterion.getSecondValue() != null && criterion.getCondition().contains(OperationTypes.BETWEEN);
         }
+
         public boolean isNoValue() {
             return criterion.getValue() == null && criterion.getSecondValue() == null;
         }
@@ -377,6 +409,7 @@ public class JoinExample {
         public static Where custom(boolean alias) {
             return new Where().setAlias(alias);
         }
+
         public static Where custom() {
             return new Where();
         }
@@ -544,6 +577,7 @@ public class JoinExample {
         public <T> Where andLike(Fn<T, Object> fn, String value) {
             return this.andLike(column(fn, isAlias), value);
         }
+
         public <T> Where andLike(Fn<T, Object> fn, String value, String format) {
             return this.andLike(column(fn, isAlias), value, format);
         }
@@ -551,6 +585,7 @@ public class JoinExample {
         public Where andNotLike(String property, String value, String format) {
             return like(property, value, format, OperationTypes.NOT_LIKE, AND);
         }
+
         public Where andNotLike(String property, String value) {
             return andNotLike(property, value, LIKE_FORMAT);
         }
@@ -558,6 +593,7 @@ public class JoinExample {
         public <T> Where andNotLike(Fn<T, Object> fn, String value) {
             return this.andNotLike(column(fn, isAlias), value);
         }
+
         public <T> Where andNotLike(Fn<T, Object> fn, String value, String format) {
             return this.andNotLike(column(fn, isAlias), value, format);
         }
@@ -709,12 +745,15 @@ public class JoinExample {
         public <T> Where beanIgnore(Object bean, Set<Fn<T, Object>> ignores) {
             return bean(bean, tableAlias(bean.getClass()), ignores.stream().map(f -> column(f, isAlias)).collect(Collectors.toSet()));
         }
+
         public <T> Where bean(Object bean, Set<String> ignores) {
             return bean(bean, tableAlias(bean.getClass()), ignores);
         }
+
         public <T> Where bean(Object bean, String alias) {
             return bean(bean, alias, null);
         }
+
         public <T> Where bean(Object bean) {
             return bean(bean, tableAlias(bean.getClass()), null);
         }
@@ -797,7 +836,7 @@ public class JoinExample {
             if (!isNullValue) {
                 this.criteria.getCriterions().removeIf(criterion ->
                         (!criterion.getCondition().contains(NULL) && criterion.getValue() == null)
-                        || (criterion.getValue() instanceof Iterable && CollUtil.isEmpty((Iterable<?>) criterion.getValue()))
+                                || (criterion.getValue() instanceof Iterable && CollUtil.isEmpty((Iterable<?>) criterion.getValue()))
                 );
             }
             return criteria;
@@ -811,6 +850,7 @@ public class JoinExample {
         private EntityField field;
         private String tableName;
         private Object value;
+
         @SneakyThrows
         public boolean isNullValueAbsent(Object object) {
             Object value = field.getValue(object);
@@ -824,6 +864,7 @@ public class JoinExample {
 
     public static class JustWhere<T extends JustWhere> {
         private List<Sqls.Criteria> sqlsCriteria = new ArrayList<>();
+
         public T where(Sqls sqls) {
             Sqls.Criteria criteria = sqls.getCriteria();
             criteria.setAndOr(AND);
@@ -921,12 +962,14 @@ public class JoinExample {
             throw new ReflectionOperationException(e);
         }
     }
+
     private static String column(Fn fn) {
         return column(fn, true);
     }
 
     /**
      * 获取class列
+     *
      * @param c
      * @return
      */
@@ -964,6 +1007,7 @@ public class JoinExample {
     /**
      * 如果不是简单类型，直接跳过
      * 如果标记了 Column 或 ColumnType 注解，也不忽略
+     *
      * @param field
      * @return
      */
